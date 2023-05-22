@@ -1,0 +1,12 @@
+/* destLog(개인정보 파기이력) */
+CREATE TABLE IF NOT EXISTS SI_DEST_LOG
+(
+    LOG_SEQ       INT(11) NOT NULL COMMENT '로그_일련번호', 
+    DEST_ID       VARCHAR(20) NOT NULL COMMENT '파기자_아이디', 
+    TARGET_ID     VARCHAR(50) COMMENT '파기대상_아이디', 
+    TARGET_NM     VARCHAR(50) NOT NULL COMMENT '파기대상_이름', 
+    MTHD_NM       VARCHAR(30) COMMENT '처리_방법', 
+    TERM_INFO     VARCHAR(50) COMMENT '개인정보_이용기간', 
+    DEST_DT       DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL COMMENT '파기_일시', 
+    CONSTRAINT PK_SI_DEST_LOG PRIMARY KEY (LOG_SEQ)  
+) COMMENT='개인정보_파기_이력';
