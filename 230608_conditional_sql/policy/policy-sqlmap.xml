@@ -1,0 +1,331 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+    PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+    "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="_policy">
+
+    <sql id="dynamicWhere">
+    
+        <!-- 민원보기 검색 -->
+        <if test="@Ognl@isNotEmpty(sk) and @Ognl@isNotEmpty(sv)">
+            AND %{ @Ognl@like(_databaseId, sk, sv, '%', '%')}
+        </if>
+        <if test="@Ognl@isNotEmpty(sv03)">
+         AND A.CIVIL_SRV_NUM IN (
+             SELECT CIVIL_SRV_NUM 
+               FROM POLICY_SUMMARY_TBL
+              WHERE POLICY_CD = #{sv03}
+             )
+        </if>
+        <if test="@Ognl@isNotEmpty(sv04) and @Ognl@isNotEmpty(sv05)">
+            <if test="sv04 == 'REAL_REG_DT'">
+                AND A.REAL_REG_DT <![CDATA[>=]]> TO_DATE(#{sv05} || ' 00:00:00', 'YYYY-MM-DD HH24:MI:SS')
+                AND A.REAL_REG_DT <![CDATA[<=]]> SYSDATE 
+            </if>
+            <if test="sv05 == 'PROC_DT'">
+                AND A.PROC_DT <![CDATA[>=]]> TO_DATE(#{sv05} || ' 00:00:00', 'YYYY-MM-DD HH24:MI:SS')
+                AND A.PROC_DT <![CDATA[<=]]> SYSDATE 
+            </if>
+        </if>
+        <if test="@Ognl@isNotEmpty(sv06)">
+            AND A.CIVIL_KIND_CD = #{sv06}
+        </if>
+        <if test="@Ognl@isNotEmpty(seqList)">
+         AND A.CIVIL_SRV_NUM IN (
+             <foreach collection="seqList" item="item" separator=",">#{item}</foreach>
+         )
+        </if>
+    </sql>
+
+    <select id="vocList" parameterType="smSearchBean" resultType="statIssueBean">
+        SELECT Y.* FROM (
+            SELECT ROWNUM NUM, X.* FROM (        
+                SELECT ROW_NUMBER() OVER(ORDER BY A.CIVIL_SRV_NUM DESC) AS ORDER_NO
+                     , A.CIVIL_SRV_NUM
+                     , A.TITLE
+                     , A.CONTENT
+                     , A.ANSWER
+                     , A.CONTENT_DEL_YN
+                     , (SELECT Z.ALL_DEPT_NM FROM ORG_CHART Z WHERE Z.DEPT_CD = A.PROC_DEPT_CD) AS DEPT_NM
+                     , (SELECT Z.USER_NM FROM OPERATOR_GRP Z WHERE Z.USER_ID = A.PROC_ID) AS PROC_NM              
+                     , TO_CHAR(A.PROC_DT, 'YYYY.MM.DD') AS PROC_DT
+                     , TO_CHAR(A.REAL_REG_DT, 'YYYY.MM.DD') AS DAY
+                  FROM MINWON_MAIN A
+                 WHERE 1=1
+                 <include refid="dynamicWhere" />
+            ) X WHERE ROWNUM &lt;= #{endNum}
+        ) Y WHERE NUM &gt;= #{startNum}  
+    </select>
+    
+    <select id="vocListCount" parameterType="smSearchBean" resultType="int">
+        SELECT COUNT(CIVIL_SRV_NUM)
+          FROM MINWON_MAIN A
+         WHERE 1=1
+         <include refid="dynamicWhere" />
+    </select>
+    
+    <select id="ctgList" parameterType="map" resultType="map">
+        SELECT CATE_CD
+             , CATE_NM
+             , ORG_CD
+             , ORG_NM
+             , USER_ID
+             , OWNER
+             , MOD_USER_ID
+             , MOD_USER_NM
+             , IS_USE
+             , IS_DEL
+             , REG_DT
+             , MOD_DT
+             , CATE_ORD
+             , SYS_CD
+             , SYS_NM
+             , CATE_CLR
+             , (SELECT COUNT(POLICY_SEQ) FROM POLICY Z WHERE Z.CATE_CD = A.CATE_CD ) AS POLICY_CNT
+          FROM POLICY_CATEGORY A
+         WHERE 1=1
+           AND ORG_CD = #{orgCd}
+           --AND IS_DEL != 1
+         ORDER BY CATE_ORD ASC
+    </select>
+
+    <select id="ctgView" parameterType="map" resultType="map">
+        SELECT CATE_CD
+             , CATE_NM
+             , ORG_CD
+             , ORG_NM
+             , USER_ID
+             , OWNER
+             , MOD_USER_ID
+             , MOD_USER_NM
+             , IS_USE
+             , IS_DEL
+             , REG_DT
+             , MOD_DT
+             , CATE_ORD
+             , SYS_CD
+             , SYS_NM
+             , CATE_CLR
+             , (SELECT COUNT(POLICY_SEQ) FROM POLICY Z WHERE Z.CATE_CD = A.CATE_CD ) AS POLICY_CNT
+          FROM POLICY_CATEGORY A
+         WHERE CATE_CD = #{CATE_CD}
+    </select>
+
+    <select id="policyList" parameterType="map" resultType="map">
+        SELECT POLICY_SEQ
+             , CATE_CD
+             , POLICY_CD
+             , POLICY_NM
+             , USER_ID
+             , OWNER
+             , MOD_USER_ID
+             , MOD_USER_NM
+             , IS_USE
+             , IS_DEL
+             , REG_DT
+             , MOD_DT
+             , POLICY_ORD
+          FROM POLICY
+         WHERE CATE_CD = #{cateCd}
+         ORDER BY POLICY_ORD ASC
+    </select>
+    
+    <insert id="insertPolicyAction" parameterType="map">
+        INSERT 
+          INTO POLICY (
+               POLICY_SEQ 
+             , CATE_CD    
+             , POLICY_CD  
+             , POLICY_NM  
+             , USER_ID    
+             , OWNER      
+             , IS_USE     
+             , IS_DEL     
+             , REG_DT     
+             , POLICY_ORD 
+        )
+        VALUES (
+               (SELECT NVL(MAX(POLICY_SEQ),0)+1 FROM POLICY)
+             , #{CATE_CD}
+             , (SELECT 'P' || LPAD(TO_NUMBER(MAX(SUBSTR(POLICY_CD,2,4)))+1, 4, 0) FROM POLICY)
+             , #{POLICY_NM}
+             , #{USER_ID}
+             , #{OWNER}
+             , 1
+             , 0
+             , SYSDATE
+             , (SELECT NVL(MAX(POLICY_ORD),0)+1 FROM POLICY WHERE CATE_CD = #{CATE_CD})
+        )        
+    </insert>
+    
+    <insert id="insertCategoryAction" parameterType="map">
+        INSERT 
+          INTO POLICY_CATEGORY (
+               CATE_CD    
+             , CATE_NM    
+             , ORG_CD     
+             , ORG_NM     
+             , USER_ID    
+             , OWNER      
+             , IS_USE     
+             , IS_DEL     
+             , REG_DT     
+             , CATE_ORD   
+             , SYS_CD     
+             , SYS_NM     
+             , CATE_CLR   
+        )
+        VALUES (
+               (SELECT 'C' || LPAD(TO_NUMBER(MAX(SUBSTR(CATE_CD,2,4)))+1, 4, 0) FROM POLICY_CATEGORY)
+             , #{CATE_NM}
+             , #{ORG_CD}
+             , #{ORG_NM}
+             , #{USER_ID}
+             , #{OWNER}
+             , 1
+             , 0
+             , SYSDATE
+             , (SELECT NVL(MAX(CATE_ORD),0)+1 FROM POLICY_CATEGORY WHERE ORG_CD = #{ORG_CD})
+             , 'eungdapso'
+             , '응답소'
+             , #{CATE_CLR}
+        )        
+    </insert>
+    
+    <update id="updateCategoryAction" parameterType="map">
+        UPDATE POLICY_CATEGORY
+           SET MOD_DT      = SYSDATE
+             , MOD_USER_ID = #{MOD_USER_ID}
+             , MOD_USER_NM = #{MOD_USER_NM}
+             <if test="@Ognl@isNotEmpty(CATE_NM)">
+             , CATE_NM     = #{CATE_NM}
+             </if>
+             <if test="@Ognl@isNotEmpty(IS_USE)">
+             , IS_USE      = #{IS_USE}
+             </if>
+             <if test="@Ognl@isNotEmpty(IS_DEL)">
+             , IS_DEL      = #{IS_DEL}
+             </if>
+             <if test="@Ognl@isNotEmpty(CATE_ORD)">
+             , CATE_ORD    = #{CATE_ORD}
+             </if>
+             <if test="@Ognl@isNotEmpty(CATE_CLR)">
+             , CATE_CLR    = #{CATE_CLR}
+             </if>
+         WHERE CATE_CD = #{CATE_CD}
+    </update>
+    
+    <update id="updatePolicyAction" parameterType="map">
+        UPDATE POLICY
+           SET MOD_DT      = SYSDATE
+             , MOD_USER_ID = #{MOD_USER_ID}
+             , MOD_USER_NM = #{MOD_USER_NM}
+             <if test="@Ognl@isNotEmpty(POLICY_NM)">
+             , POLICY_NM   = #{POLICY_NM}
+             </if>
+             <if test="@Ognl@isNotEmpty(IS_USE)">
+             , IS_USE      = #{IS_USE}
+             </if>
+             <if test="@Ognl@isNotEmpty(IS_DEL)">
+             , IS_DEL      = #{IS_DEL}
+             </if>
+             <if test="@Ognl@isNotEmpty(POLICY_ORD)">
+             , POLICY_ORD  = #{POLICY_ORD}
+             </if>
+         WHERE POLICY_SEQ  = #{POLICY_SEQ}
+    </update>
+    
+    <select id="vocKindList" resultType="map">
+        SELECT KIND_CD
+             , KIND_NM 
+          FROM CIVIL_PETITION_KIND
+    </select>
+    
+    <insert id="insertPolicyConditionAction" parameterType="map">
+        INSERT 
+          INTO POLICY_PROP (
+               POLICY_PROP_NUM
+             , BASE_DT_TYPE
+             , ST_DT
+             , KIND_CD
+             , CONDITION
+             , KEYWORD
+             , REG_USER_ID
+             , REG_DT
+             , POLICY_SEQ
+             ) 
+       VALUES (
+              (SELECT NVL(MAX(POLICY_PROP_NUM),0)+1  FROM POLICY_PROP)
+            , #{BASE_DT_TYPE}
+            , #{ST_DT}
+            , #{KIND_CD}
+            , #{CONDITION}
+            , #{KEYWORD}
+            , #{REG_USER_ID}
+            , SYSDATE
+            , #{POLICY_SEQ}
+       )
+    </insert>
+    <update id="updatePolicyConditionAction" parameterType="map">
+        UPDATE POLICY_PROP
+           SET BASE_DT_TYPE = #{BASE_DT_TYPE}
+             , ST_DT        = #{ST_DT}       
+             , KIND_CD      = #{KIND_CD}     
+             , CONDITION    = #{CONDITION}   
+             , KEYWORD      = #{KEYWORD}   
+             , MOD_USER_ID  = #{MOD_USER_ID} 
+             , MOD_DT       = SYSDATE        
+         WHERE POLICY_SEQ   = #{POLICY_SEQ}  
+    </update>
+    
+    <select id="selectPolicyCondition" parameterType="map" resultType="map">
+        SELECT POLICY_PROP_NUM
+             , BASE_DT_TYPE
+             , ST_DT
+             , KIND_CD
+             , CONDITION
+             , KEYWORD
+             , REG_USER_ID
+             , REG_DT
+             , POLICY_SEQ
+          FROM POLICY_PROP
+         WHERE POLICY_SEQ = #{POLICY_SEQ}
+    </select>
+    
+    <select id="vocListAll" parameterType="smSearchBean" resultType="map">
+        SELECT ROW_NUMBER() OVER(ORDER BY A.CIVIL_SRV_NUM DESC) AS ORDER_NO
+             , A.CIVIL_SRV_NUM
+             , A.TITLE
+             , A.CONTENT
+             , A.ANSWER
+             , A.CONTENT_DEL_YN
+             , (SELECT Z.ALL_DEPT_NM FROM ORG_CHART Z WHERE Z.DEPT_CD = A.PROC_DEPT_CD) AS DEPT_NM
+             , (SELECT Z.USER_NM FROM OPERATOR_GRP Z WHERE Z.USER_ID = A.PROC_ID) AS PROC_NM              
+             , TO_CHAR(A.PROC_DT, 'YYYY.MM.DD') AS PROC_DT
+             , TO_CHAR(A.REAL_REG_DT, 'YYYY.MM.DD') AS DAY
+          FROM MINWON_MAIN A
+         WHERE 1=1
+         <include refid="dynamicWhere" />
+    </select>
+    
+    <select id="conditionUnsetPolicy" resultType="map">
+        SELECT COUNT(1) AS CNT
+             , LISTAGG(POLICY_SEQ,'|') AS POLICY_SEQS
+          FROM POLICY A
+         INNER JOIN POLICY_CATEGORY B
+            ON A.CATE_CD = B.CATE_CD
+           AND B.ORG_CD = #{orgCd}
+           AND B.IS_DEL != 1
+        WHERE POLICY_SEQ NOT IN ( 
+                  SELECT POLICY_SEQ 
+                    FROM POLICY_PROP 
+              )
+    </select>
+    
+    <update id="togglePolicyBlindAction" parameterType="int">
+        UPDATE POLICY_SUMMARY_TBL
+           SET BLIND_YN = CASE WHEN BLIND_YN = 'Y' THEN 'N' ELSE 'Y' END
+         WHERE CIVIL_SRV_NUM = #{civilSrvNum}
+    </update>
+</mapper>
